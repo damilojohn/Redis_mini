@@ -3,6 +3,9 @@ from gevent.pool import Pool
 from gevent.server import StreamServer
 from collections import namedtuple
 from io import BytesIO
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CommandError(Exception):
@@ -34,7 +37,7 @@ class ProtocolHandler(object):
             raise Disconnect()
         try:
             # chose the appropiate handler based on the first byte
-            return self.handlers[first_byte](socket_file)
+            return self.handlers[first_byte.decode('utf-8')](socket_file)
         except KeyError:
             raise CommandError('bad request')
 
@@ -77,18 +80,21 @@ class ProtocolHandler(object):
             data = data.encode('utf-8')
 
         if isinstance(data, bytes):
-            buf.write('$%s\r\n%s\r\n' % (len(data), data))
+            buf.write('$%s\r\n%s\r\n'.encode('utf-8') %
+                      (str(len(data)).encode('utf-8'), data))
 
         elif isinstance(data, int):
-            buf.write('#%s\r\n' % data)
+            data = str(data).encode('utf-8')
+            buf.write('#%s\r\n'.encode('utf-8') % data)
 
         elif isinstance(data, (list, tuple)):
-            buf.write('*%s\r\n' % len(data))
+            buf.write('*%s\r\n'.encode('utf-8') %
+                      str(len(data)).encode('utf-8'))
             for item in data:
                 self._write(buf, item)
 
         elif isinstance(data, dict):
-            buf.write('%%%s\r\n' % len(data))
+            buf.write('%s\r\n' % len(data))
             for key in data:
                 self._write(buf, key)
                 self._write(buf, data[key])
@@ -217,4 +223,6 @@ class Client(object):
 if __name__ == '__main__':
     from gevent import monkey
     monkey.patch_all()
+    logger.addHandler(logging.StreamHandler)
+    logger.setLevel(logging.DEBUG)
     Server().run()
